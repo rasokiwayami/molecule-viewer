@@ -24,10 +24,15 @@ self.addEventListener('activate', (event) => {
   );
 });
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'CACHE_HANDS')
+  if (event.data?.type === 'CACHE_HANDS') {
+    // Tracking runs either in a worker or on the page; keep only the files of the one in use.
+    const unused =
+      event.data.tracking === 'worker'
+        ? /vision_wasm_internal\.|assets\/landmarker-/
+        : /vision_wasm_module_internal\.|assets\/hands-worker-/;
     event.waitUntil(
       caches.open(OPTIONAL).then(async (cache) => {
-        for (const path of HAND_ASSETS) {
+        for (const path of HAND_ASSETS.filter((path) => !unused.test(path))) {
           const url = local(path);
           if (!(await cache.match(url))) {
             try {
@@ -39,6 +44,7 @@ self.addEventListener('message', (event) => {
         }
       }),
     );
+  }
 });
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);

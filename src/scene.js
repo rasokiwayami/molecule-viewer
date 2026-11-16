@@ -15,7 +15,6 @@ const SCATTER_MS = 380;
 const IDLE_BEFORE_SPIN_MS = 3000;
 const IDLE_SPIN_SPEED = 0.22;
 // How quickly the view catches up with its target, per second. Higher is snappier.
-const GLIDE_RATE = 14;
 const ZOOM_RATE = 12;
 const INERTIA_DECAY = 3.2;
 const BLOOM_REST = 0.2;
@@ -180,6 +179,7 @@ export function createScene({ host, atomLabel, onFailure }) {
   let zoom = 1;
   let zoomTarget = 1;
   let pendingTurn = { x: 0, y: 0 };
+  let pendingTime = 50;
   let spinSpeed = 0;
   let velocity = { x: 0, y: 0 };
   let lastInput = 0;
@@ -373,11 +373,15 @@ export function createScene({ host, atomLabel, onFailure }) {
     lastInput = performance.now();
   }
 
-  /** Rotation that is spread over the next frames. Used for input that arrives in coarse steps. */
-  function glide(dx, dy) {
+  /**
+   * Rotation spread at an even speed over the time until the next sample is due.
+   * Used for input that arrives in coarse steps, such as hand positions from the camera.
+   */
+  function glide(dx, dy, interval = 50) {
     velocity = { x: 0, y: 0 };
     pendingTurn.x += dx;
     pendingTurn.y += dy;
+    pendingTime = THREE.MathUtils.clamp(interval, 16, 120);
   }
 
   function resetView() {
@@ -486,11 +490,12 @@ export function createScene({ host, atomLabel, onFailure }) {
   function easeTowardsTargets(dt, now) {
     const keepInput = lastInput;
 
-    const turnShare = 1 - Math.exp(-dt * GLIDE_RATE);
-    if (Math.abs(pendingTurn.x) + Math.abs(pendingTurn.y) > 1e-5) {
+    if (Math.abs(pendingTurn.x) + Math.abs(pendingTurn.y) > 1e-6) {
+      const turnShare = Math.min(1, (dt * 1000) / pendingTime);
       rotate(pendingTurn.x * turnShare, pendingTurn.y * turnShare);
       pendingTurn.x *= 1 - turnShare;
       pendingTurn.y *= 1 - turnShare;
+      pendingTime = Math.max(1, pendingTime - dt * 1000);
     }
 
     if (Math.abs(zoomTarget - zoom) > 1e-4) {

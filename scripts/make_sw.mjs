@@ -11,7 +11,7 @@ async function files(dir, prefix = '') {
 }
 const all = await files('dist');
 // Files needed only for hand control are fetched and cached when it is first switched on.
-const handsOnly = (path) => path.startsWith('mediapipe/') || /^assets\/vision_bundle-/.test(path);
+const handsOnly = (path) => path.startsWith('mediapipe/') || /^assets\/(hands-worker|landmarker|vision_bundle)-/.test(path);
 const pre = all.filter((path) => path !== 'sw.js' && !handsOnly(path));
 const hands = all.filter(handsOnly);
 const template = await readFile('public/sw.js', 'utf8');

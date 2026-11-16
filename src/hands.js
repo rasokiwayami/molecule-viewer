@@ -67,7 +67,9 @@ const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
  */
 export function createHands({ video, overlay, scene, onChange, onHands, onError }) {
   const context = overlay.getContext('2d');
-  let landmarker = null;
+  let detector = null;
+  let busy = false;
+  let lastSample = 0;
   let stream = null;
   let state = 'off';
   let session = 0;
@@ -88,8 +90,9 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     video.srcObject = null;
-    landmarker?.close();
-    landmarker = null;
+    detector?.close();
+    detector = null;
+    busy = false;
     tracked.clear();
     lastPinches = null;
     lastVideoTime = -1;
@@ -103,22 +106,67 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
     onError(reason || 'failed');
   }
 
-  async function createLandmarker() {
-    const { HandLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
-    const files = await FilesetResolver.forVisionTasks(assetURL('mediapipe'));
-    const options = (delegate) => ({
-      baseOptions: { modelAssetPath: assetURL('mediapipe/hand_landmarker.task'), delegate },
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.55,
-      minHandPresenceConfidence: 0.55,
-      minTrackingConfidence: 0.55,
-    });
+  /** Tracking in a worker. Rejects when this browser cannot do it, so the caller can fall back. */
+  async function workerDetector(urls) {
+    (await createImageBitmap(video)).close();
+    const worker = new Worker(new URL('./hands-worker.js', import.meta.url), { type: 'module' });
+    let pending = null;
+    const settle = (action, value) => {
+      pending?.[action](value);
+      pending = null;
+    };
+    worker.onmessage = ({ data }) =>
+      data.type === 'error'
+        ? settle('reject', new Error('worker'))
+        : settle('resolve', data.result);
+    worker.onerror = () => settle('reject', new Error('worker'));
     try {
-      return await HandLandmarker.createFromOptions(files, options('GPU'));
-    } catch {
-      return HandLandmarker.createFromOptions(files, options('CPU'));
+      await new Promise((resolve, reject) => {
+        pending = { resolve, reject };
+        worker.postMessage({ type: 'init', urls });
+      });
+    } catch (error) {
+      worker.terminate();
+      throw error;
     }
+    return {
+      kind: 'worker',
+      async detect(time) {
+        const bitmap = await createImageBitmap(video);
+        return new Promise((resolve, reject) => {
+          pending = { resolve, reject };
+          worker.postMessage({ type: 'frame', bitmap, time }, [bitmap]);
+        });
+      },
+      close: () => worker.terminate(),
+    };
+  }
+
+  async function mainThreadDetector(urls) {
+    const { createLandmarker, summarise } = await import('./landmarker.js');
+    const landmarker = await createLandmarker(urls);
+    return {
+      kind: 'main',
+      detect: async (time) => summarise(landmarker.detectForVideo(video, time)),
+      close: () => landmarker.close(),
+    };
+  }
+
+  async function createDetector() {
+    // Absolute, because a worker resolves relative addresses against its own file.
+    const absolute = (path) => new URL(assetURL(path), document.baseURI).href;
+    const urls = {
+      wasm: absolute('mediapipe'),
+      model: absolute('mediapipe/hand_landmarker.task'),
+    };
+    if (window.Worker && window.OffscreenCanvas && window.createImageBitmap) {
+      try {
+        return await workerDetector(urls);
+      } catch {
+        // Older browsers cannot track in a worker.
+      }
+    }
+    return mainThreadDetector(urls);
   }
 
   async function start() {
@@ -129,21 +177,29 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
     const mySession = ++session;
     setState('starting');
     let pendingStream;
-    let pendingLandmarker;
+    let pendingDetector;
     try {
-      // Ask for the camera first, so a refusal does not cost a 37 MB download.
+      // Ask for the camera first, so a refusal does not cost the download of the model.
       pendingStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 30 },
+          facingMode: 'user',
+        },
         audio: false,
       });
       if (mySession !== session) throw new Error('cancelled');
       stream = pendingStream;
       video.srcObject = stream;
       await video.play();
-      pendingLandmarker = await createLandmarker();
+      pendingDetector = await createDetector();
       if (mySession !== session) throw new Error('cancelled');
-      landmarker = pendingLandmarker;
-      navigator.serviceWorker?.controller?.postMessage({ type: 'CACHE_HANDS' });
+      detector = pendingDetector;
+      navigator.serviceWorker?.controller?.postMessage({
+        type: 'CACHE_HANDS',
+        tracking: detector.kind,
+      });
       stream.getVideoTracks()[0]?.addEventListener('ended', () => state === 'on' && fail(), {
         once: true,
       });
@@ -154,7 +210,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
         fail(error);
       } else {
         pendingStream?.getTracks().forEach((track) => track.stop());
-        pendingLandmarker?.close();
+        pendingDetector?.close();
       }
     }
   }
@@ -162,15 +218,21 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
   function loop(now) {
     if (state !== 'on') return;
     const hasNewFrame = video.readyState >= 2 && video.currentTime !== lastVideoTime;
-    if (!document.hidden && hasNewFrame && now - lastInference >= 1000 / CONFIG.hands.fps) {
+    // A few milliseconds of slack, so that a camera at exactly the target rate is not halved.
+    const due = now - lastInference >= 1000 / CONFIG.hands.fps - 4;
+    if (!busy && !document.hidden && hasNewFrame && due) {
       lastVideoTime = video.currentTime;
       lastInference = now;
-      try {
-        handle(landmarker.detectForVideo(video, now), now);
-      } catch (error) {
-        fail(error);
-        return;
-      }
+      busy = true;
+      const mySession = session;
+      detector.detect(now).then(
+        (result) => {
+          if (mySession !== session) return;
+          busy = false;
+          handle(result, now);
+        },
+        (error) => mySession === session && fail(error),
+      );
     }
     frameRequest = requestAnimationFrame(loop);
   }
@@ -201,7 +263,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
     const hands = [];
     const seen = new Set();
     result.landmarks.forEach((points, i) => {
-      const label = result.handedness?.[i]?.[0]?.categoryName || String(i);
+      const label = result.labels[i];
       if (seen.has(label)) return;
       seen.add(label);
 
@@ -244,11 +306,16 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       }
     }
     onHands(hands);
-    applyGesture(hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)));
+    applyGesture(
+      hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)),
+      now,
+    );
   }
 
   /** Moves the molecule by the change since the previous frame with the same pinching hands. */
-  function applyGesture(pinches) {
+  function applyGesture(pinches, now) {
+    const interval = now - lastSample;
+    lastSample = now;
     const signature = pinches.map((hand) => hand.id).join(',');
     const before = lastPinches?.signature === signature ? lastPinches.pinches : null;
     lastPinches = pinches.length ? { signature, pinches } : null;
@@ -258,6 +325,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       scene.rotate(
         (pinches[0].x - before[0].x) * ROTATION_GAIN,
         (pinches[0].y - before[0].y) * ROTATION_GAIN,
+        interval,
       );
       return;
     }
