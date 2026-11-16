@@ -15,6 +15,9 @@ const SCATTER_MS = 380;
 const IDLE_BEFORE_SPIN_MS = 3000;
 const IDLE_SPIN_SPEED = 0.22;
 // How quickly the view catches up with its target, per second. Higher is snappier.
+// How tightly the view follows the hand, per second. Higher follows sooner but shows more jitter.
+const FOLLOW_STIFFNESS = 20;
+const SPRING_STEP = 1 / 240;
 const ZOOM_RATE = 12;
 const INERTIA_DECAY = 3.2;
 const BLOOM_REST = 0.2;
@@ -179,7 +182,7 @@ export function createScene({ host, atomLabel, onFailure }) {
   let zoom = 1;
   let zoomTarget = 1;
   let pendingTurn = { x: 0, y: 0 };
-  let pendingTime = 50;
+  let turnSpeed = { x: 0, y: 0 };
   let spinSpeed = 0;
   let velocity = { x: 0, y: 0 };
   let lastInput = 0;
@@ -374,14 +377,13 @@ export function createScene({ host, atomLabel, onFailure }) {
   }
 
   /**
-   * Rotation spread at an even speed over the time until the next sample is due.
-   * Used for input that arrives in coarse steps, such as hand positions from the camera.
+   * Rotation that the view follows like a damped spring, so its speed never changes abruptly.
+   * Used for input that arrives in uneven steps, such as hand positions from the camera.
    */
-  function glide(dx, dy, interval = 50) {
+  function glide(dx, dy) {
     velocity = { x: 0, y: 0 };
     pendingTurn.x += dx;
     pendingTurn.y += dy;
-    pendingTime = THREE.MathUtils.clamp(interval, 16, 120);
   }
 
   function resetView() {
@@ -389,6 +391,7 @@ export function createScene({ host, atomLabel, onFailure }) {
     zoom = zoomTarget = 1;
     velocity = { x: 0, y: 0 };
     pendingTurn = { x: 0, y: 0 };
+    turnSpeed = { x: 0, y: 0 };
     spinSpeed = 0;
     fit();
     lastInput = performance.now();
@@ -490,13 +493,22 @@ export function createScene({ host, atomLabel, onFailure }) {
   function easeTowardsTargets(dt, now) {
     const keepInput = lastInput;
 
-    if (Math.abs(pendingTurn.x) + Math.abs(pendingTurn.y) > 1e-6) {
-      const turnShare = Math.min(1, (dt * 1000) / pendingTime);
-      rotate(pendingTurn.x * turnShare, pendingTurn.y * turnShare);
-      pendingTurn.x *= 1 - turnShare;
-      pendingTurn.y *= 1 - turnShare;
-      pendingTime = Math.max(1, pendingTime - dt * 1000);
+    // A critically damped spring pulls the view towards the turn that is still owed.
+    // Short steps keep it stable when frames are slow.
+    const steps = Math.ceil(dt / SPRING_STEP);
+    const step = dt / steps;
+    let turnX = 0;
+    let turnY = 0;
+    for (let i = 0; i < steps; i++) {
+      for (const axis of ['x', 'y']) {
+        const pull = FOLLOW_STIFFNESS ** 2 * pendingTurn[axis];
+        turnSpeed[axis] += (pull - 2 * FOLLOW_STIFFNESS * turnSpeed[axis]) * step;
+        pendingTurn[axis] -= turnSpeed[axis] * step;
+      }
+      turnX += turnSpeed.x * step;
+      turnY += turnSpeed.y * step;
     }
+    if (Math.abs(turnX) + Math.abs(turnY) > 1e-7) rotate(turnX, turnY);
 
     if (Math.abs(zoomTarget - zoom) > 1e-4) {
       zoom += (zoomTarget - zoom) * (1 - Math.exp(-dt * ZOOM_RATE));

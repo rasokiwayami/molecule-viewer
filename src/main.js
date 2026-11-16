@@ -159,6 +159,25 @@ document.addEventListener('keydown', (event) => {
   action();
 });
 
+// "?stats" shows how many frames are drawn and how many hand positions arrive each second.
+if (new URLSearchParams(location.search).has('stats')) {
+  const readout = document.createElement('pre');
+  readout.style.cssText =
+    'position:fixed;top:72px;right:16px;z-index:9;margin:0;font:12px ui-monospace,monospace;color:#d7ff5e';
+  document.body.append(readout);
+  let frames = 0;
+  const count = () => requestAnimationFrame(count) && frames++;
+  count();
+  setInterval(() => {
+    const { samples, delay, tracking } = hands?.takeStats() ?? {};
+    const handLine = samples
+      ? `hand ${samples}/s  delay ${Math.round(delay / samples)} ms  ${tracking}`
+      : 'hand -';
+    readout.textContent = `draw ${frames}/s\n${handLine}`;
+    frames = 0;
+  }, 1000);
+}
+
 async function init() {
   try {
     catalog = await loadCatalog();

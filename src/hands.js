@@ -69,7 +69,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
   const context = overlay.getContext('2d');
   let detector = null;
   let busy = false;
-  let lastSample = 0;
+  const stats = { samples: 0, delay: 0 };
   let stream = null;
   let state = 'off';
   let session = 0;
@@ -229,6 +229,8 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
         (result) => {
           if (mySession !== session) return;
           busy = false;
+          stats.samples++;
+          stats.delay += performance.now() - now;
           handle(result, now);
         },
         (error) => mySession === session && fail(error),
@@ -256,8 +258,12 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
   }
 
   function handle(result, now) {
-    overlay.width = video.videoWidth || 640;
-    overlay.height = video.videoHeight || 480;
+    const width = video.videoWidth || 640;
+    const height = video.videoHeight || 480;
+    if (overlay.width !== width || overlay.height !== height) {
+      overlay.width = width;
+      overlay.height = height;
+    }
     context.clearRect(0, 0, overlay.width, overlay.height);
 
     const hands = [];
@@ -306,16 +312,11 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       }
     }
     onHands(hands);
-    applyGesture(
-      hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)),
-      now,
-    );
+    applyGesture(hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)));
   }
 
   /** Moves the molecule by the change since the previous frame with the same pinching hands. */
-  function applyGesture(pinches, now) {
-    const interval = now - lastSample;
-    lastSample = now;
+  function applyGesture(pinches) {
     const signature = pinches.map((hand) => hand.id).join(',');
     const before = lastPinches?.signature === signature ? lastPinches.pinches : null;
     lastPinches = pinches.length ? { signature, pinches } : null;
@@ -325,7 +326,6 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       scene.rotate(
         (pinches[0].x - before[0].x) * ROTATION_GAIN,
         (pinches[0].y - before[0].y) * ROTATION_GAIN,
-        interval,
       );
       return;
     }
@@ -346,6 +346,12 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
 
   return {
     toggle: () => (state === 'off' ? start() : stop()),
+    /** Hand positions received and their total delay in ms since the last call. */
+    takeStats() {
+      const taken = { ...stats, tracking: detector?.kind };
+      stats.samples = stats.delay = 0;
+      return taken;
+    },
     stop,
   };
 }
