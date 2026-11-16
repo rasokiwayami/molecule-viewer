@@ -10,8 +10,10 @@ async function files(dir, prefix = '') {
   return result.sort();
 }
 const all = await files('dist');
-const pre = all.filter((path) => path !== 'sw.js' && !path.startsWith('mediapipe/'));
-const hands = all.filter((path) => path.startsWith('mediapipe/'));
+// Files needed only for hand control are fetched and cached when it is first switched on.
+const handsOnly = (path) => path.startsWith('mediapipe/') || /^assets\/vision_bundle-/.test(path);
+const pre = all.filter((path) => path !== 'sw.js' && !handsOnly(path));
+const hands = all.filter(handsOnly);
 const template = await readFile('public/sw.js', 'utf8');
 const hash = createHash('sha256').update(template);
 for (const path of pre) hash.update(path).update(await readFile(`dist/${path}`));

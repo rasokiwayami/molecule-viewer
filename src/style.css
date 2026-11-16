@@ -761,6 +761,22 @@ dialog[open] {
   }
 }
 
+/* Blurring what is behind a panel on every frame is costly on phones. */
+@media (pointer: coarse) {
+  .icon,
+  #dock,
+  dialog,
+  dialog::backdrop {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .icon,
+  #dock {
+    background: rgba(12, 16, 27, 0.86);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

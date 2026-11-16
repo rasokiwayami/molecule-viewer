@@ -54,7 +54,7 @@ self.addEventListener('fetch', (event) => {
         return (await caches.open(CACHE))
           .match(local('index.html'))
           .then((hit) => hit || fetch(event.request));
-      const optional = url.pathname.includes('/mediapipe/');
+      const optional = HAND_ASSETS.some((path) => local(path) === url.href);
       const cache = await caches.open(optional ? OPTIONAL : CACHE);
       // Some servers answer with "Vary: Origin"; the precached copy is still the right one.
       const hit = await cache.match(event.request, { ignoreVary: true });

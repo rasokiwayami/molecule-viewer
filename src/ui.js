@@ -1,4 +1,3 @@
-import qrcode from 'qrcode-generator';
 import { BLURBS } from './blurbs.js';
 import { element } from './elements.js';
 import { CONFIG } from './config.js';
@@ -98,7 +97,8 @@ export function createUI({ onSelect }) {
     if (event.target === panel) panel.close();
   });
 
-  $('qr-open').onclick = () => {
+  $('qr-open').onclick = async () => {
+    const { default: qrcode } = await import('qrcode-generator');
     const url = new URL(location.href);
     url.searchParams.set('m', activeId || 'caffeine');
     const qr = qrcode(0, 'M');

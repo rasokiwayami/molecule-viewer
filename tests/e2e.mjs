@@ -152,7 +152,7 @@ try {
   await context.setOffline(false);
   await context.unroute('https://**/*');
   await page.locator('#qr-open').click();
-  assert.ok(await page.locator('dialog .qr svg').isVisible());
+  await page.locator('dialog .qr svg').waitFor({ state: 'visible' });
   await page.keyboard.press('Escape');
   await page.locator('#about-open').click();
   assert.ok(await page.locator('dialog').isVisible());

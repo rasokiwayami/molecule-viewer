@@ -16,6 +16,19 @@ const IDLE_BEFORE_SPIN_MS = 3000;
 const BLOOM_REST = 0.2;
 const BLOOM_FLASH = 0.95;
 
+// Rendering quality from full to lightest. The scene moves one step down when frames run slow.
+const QUALITY_STEPS = [
+  { pixelRatio: 2, bloom: true },
+  { pixelRatio: 1.5, bloom: true },
+  { pixelRatio: 1, bloom: true },
+  { pixelRatio: 1, bloom: false },
+  { pixelRatio: 0.75, bloom: false },
+];
+const SLOW_FRAME_MS = 24;
+const FRAMES_PER_CHECK = 45;
+// Molecules with more atoms than this use spheres with fewer triangles.
+const DETAILED_ATOM_LIMIT = 70;
+
 const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t));
 const easeOutBack = (t) => 1 + 2.4 * (t - 1) ** 3 + 1.4 * (t - 1) ** 2;
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
@@ -140,7 +153,8 @@ export function createScene({ host, atomLabel, onFailure }) {
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
-  const sphereGeometry = new THREE.SphereGeometry(1, coarse ? 24 : 40, coarse ? 16 : 28);
+  const sphereGeometry = new THREE.SphereGeometry(1, 24, 16);
+  const detailedSphereGeometry = coarse ? sphereGeometry : new THREE.SphereGeometry(1, 40, 28);
   const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
   const outline = new THREE.Mesh(
     sphereGeometry,
@@ -164,6 +178,8 @@ export function createScene({ host, atomLabel, onFailure }) {
   let lastFrame = performance.now();
   let flashStart = -Infinity;
   let frameRequest = 0;
+  let quality = coarse ? 1 : 0;
+  let slowness = { total: 0, frames: 0 };
 
   function buildModel(data) {
     const centre = new THREE.Vector3();
@@ -187,7 +203,7 @@ export function createScene({ host, atomLabel, onFailure }) {
     );
 
     const atomMesh = new THREE.InstancedMesh(
-      sphereGeometry,
+      data.atoms.length > DETAILED_ATOM_LIMIT ? sphereGeometry : detailedSphereGeometry,
       new THREE.MeshPhysicalMaterial({
         roughness: 0.28,
         metalness: 0,
@@ -316,7 +332,8 @@ export function createScene({ host, atomLabel, onFailure }) {
   function layout() {
     const { width, height } = host.getBoundingClientRect();
     if (!width || !height) return;
-    const pixelRatio = Math.min(devicePixelRatio || 1, coarse ? 1.5 : 2);
+    const pixelRatio = Math.min(devicePixelRatio || 1, QUALITY_STEPS[quality].pixelRatio);
+    bloom.enabled = QUALITY_STEPS[quality].bloom;
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height);
     composer.setPixelRatio(pixelRatio);
@@ -453,7 +470,22 @@ export function createScene({ host, atomLabel, onFailure }) {
     { passive: false },
   );
 
+  /** Lowers the rendering quality one step when the recent frames were slow on average. */
+  function watchFrameTime(elapsed) {
+    // Long gaps come from a hidden tab or a blocked main thread, not from slow rendering.
+    if (elapsed > 250) return;
+    slowness.total += elapsed;
+    if (++slowness.frames < FRAMES_PER_CHECK) return;
+    const average = slowness.total / slowness.frames;
+    slowness = { total: 0, frames: 0 };
+    if (average > SLOW_FRAME_MS && quality < QUALITY_STEPS.length - 1) {
+      quality++;
+      layout();
+    }
+  }
+
   function frame(now) {
+    watchFrameTime(now - lastFrame);
     const dt = Math.min((now - lastFrame) / 1000, 0.05);
     lastFrame = now;
 
