@@ -13,6 +13,11 @@ const MULTI_BOND_GAP = 0.19;
 const ASSEMBLE_MS = 1500;
 const SCATTER_MS = 380;
 const IDLE_BEFORE_SPIN_MS = 3000;
+const IDLE_SPIN_SPEED = 0.22;
+// How quickly the view catches up with its target, per second. Higher is snappier.
+const GLIDE_RATE = 14;
+const ZOOM_RATE = 12;
+const INERTIA_DECAY = 3.2;
 const BLOOM_REST = 0.2;
 const BLOOM_FLASH = 0.95;
 
@@ -173,6 +178,9 @@ export function createScene({ host, atomLabel, onFailure }) {
   let selected = -1;
   let fitScale = 1;
   let zoom = 1;
+  let zoomTarget = 1;
+  let pendingTurn = { x: 0, y: 0 };
+  let spinSpeed = 0;
   let velocity = { x: 0, y: 0 };
   let lastInput = 0;
   let lastFrame = performance.now();
@@ -229,9 +237,13 @@ export function createScene({ host, atomLabel, onFailure }) {
       for (let strand = 0; strand < strands; strand++) {
         const offset = side.clone().multiplyScalar((strand - (strands - 1) / 2) * MULTI_BOND_GAP);
         for (const atom of [bond.a, bond.b]) {
+          const from = positions[atom].clone().add(offset);
+          const span = middle.clone().add(offset).sub(from);
           halves.push({
-            from: positions[atom].clone().add(offset),
-            to: middle.clone().add(offset),
+            from,
+            span,
+            length: span.length(),
+            turn: new THREE.Quaternion().setFromUnitVectors(yAxis, span.clone().normalize()),
             atom,
             ready: Math.max(delays[bond.a], delays[bond.b]) + 0.3,
             thin: strands > 1,
@@ -273,17 +285,15 @@ export function createScene({ host, atomLabel, onFailure }) {
     const t = clamp01((now - (leavingNow ? model.leftAt : model.bornAt)) / duration);
 
     model.positions.forEach((target, i) => {
-      let position;
       let scale;
       if (leavingNow) {
-        position = target.clone().multiplyScalar(1 + t * t * 2.2);
+        dummy.position.copy(target).multiplyScalar(1 + t * t * 2.2);
         scale = 1 - t;
       } else {
         const local = clamp01((t - model.delays[i]) / 0.5);
-        position = model.origins[i].clone().lerp(target, easeOutExpo(local));
+        dummy.position.copy(model.origins[i]).lerp(target, easeOutExpo(local));
         scale = local <= 0 ? 0 : easeOutBack(clamp01(local * 1.4));
       }
-      dummy.position.copy(position);
       dummy.quaternion.identity();
       dummy.scale.setScalar(Math.max(1e-4, model.radii[i] * scale));
       dummy.updateMatrix();
@@ -292,16 +302,10 @@ export function createScene({ host, atomLabel, onFailure }) {
 
     model.halves.forEach((half, i) => {
       const growth = leavingNow ? 0 : easeOutExpo(clamp01((t - half.ready) / 0.25));
-      const span = half.to.clone().sub(half.from);
-      const length = span.length();
-      const width = (half.thin ? BOND_RADIUS * 0.72 : BOND_RADIUS) * (growth > 0 ? 1 : 0);
-      dummy.position.copy(half.from).addScaledVector(span, growth / 2);
-      dummy.quaternion.setFromUnitVectors(yAxis, span.normalize());
-      dummy.scale.set(
-        Math.max(1e-4, width),
-        Math.max(1e-4, length * growth),
-        Math.max(1e-4, width),
-      );
+      const width = growth > 0 ? (half.thin ? BOND_RADIUS * 0.72 : BOND_RADIUS) : 1e-4;
+      dummy.position.copy(half.from).addScaledVector(half.span, growth / 2);
+      dummy.quaternion.copy(half.turn);
+      dummy.scale.set(width, Math.max(1e-4, half.length * growth), width);
       dummy.updateMatrix();
       model.bondMesh.setMatrixAt(i, dummy.matrix);
     });
@@ -365,15 +369,23 @@ export function createScene({ host, atomLabel, onFailure }) {
   }
 
   function scaleBy(factor) {
-    zoom = THREE.MathUtils.clamp(zoom * factor, 0.4, 3);
-    fit();
+    zoomTarget = THREE.MathUtils.clamp(zoomTarget * factor, 0.4, 3);
     lastInput = performance.now();
+  }
+
+  /** Rotation that is spread over the next frames. Used for input that arrives in coarse steps. */
+  function glide(dx, dy) {
+    velocity = { x: 0, y: 0 };
+    pendingTurn.x += dx;
+    pendingTurn.y += dy;
   }
 
   function resetView() {
     root.quaternion.setFromEuler(new THREE.Euler(0.18, -0.35, 0));
-    zoom = 1;
+    zoom = zoomTarget = 1;
     velocity = { x: 0, y: 0 };
+    pendingTurn = { x: 0, y: 0 };
+    spinSpeed = 0;
     fit();
     lastInput = performance.now();
   }
@@ -470,6 +482,38 @@ export function createScene({ host, atomLabel, onFailure }) {
     { passive: false },
   );
 
+  /** Moves rotation and zoom a little closer to where the input wants them, once per frame. */
+  function easeTowardsTargets(dt, now) {
+    const keepInput = lastInput;
+
+    const turnShare = 1 - Math.exp(-dt * GLIDE_RATE);
+    if (Math.abs(pendingTurn.x) + Math.abs(pendingTurn.y) > 1e-5) {
+      rotate(pendingTurn.x * turnShare, pendingTurn.y * turnShare);
+      pendingTurn.x *= 1 - turnShare;
+      pendingTurn.y *= 1 - turnShare;
+    }
+
+    if (Math.abs(zoomTarget - zoom) > 1e-4) {
+      zoom += (zoomTarget - zoom) * (1 - Math.exp(-dt * ZOOM_RATE));
+      fit();
+    }
+
+    if (!pointers.size && Math.abs(velocity.x) + Math.abs(velocity.y) > 1e-4) {
+      rotate(velocity.x * dt * 60, velocity.y * dt * 60);
+      velocity.x *= Math.exp(-dt * INERTIA_DECAY);
+      velocity.y *= Math.exp(-dt * INERTIA_DECAY);
+    }
+    lastInput = keepInput;
+
+    // The idle spin fades in and out instead of starting and stopping at once.
+    const idle = !pointers.size && !reducedMotion && now - lastInput > IDLE_BEFORE_SPIN_MS;
+    spinSpeed += ((idle ? IDLE_SPIN_SPEED : 0) - spinSpeed) * (1 - Math.exp(-dt * 2.5));
+    if (spinSpeed > 1e-4) {
+      spin.setFromAxisAngle(yAxis, dt * spinSpeed);
+      root.quaternion.premultiply(spin);
+    }
+  }
+
   /** Lowers the rendering quality one step when the recent frames were slow on average. */
   function watchFrameTime(elapsed) {
     // Long gaps come from a hidden tab or a blocked main thread, not from slow rendering.
@@ -499,19 +543,7 @@ export function createScene({ host, atomLabel, onFailure }) {
       return false;
     });
 
-    if (!pointers.size) {
-      if (Math.abs(velocity.x) + Math.abs(velocity.y) > 1e-4) {
-        const keepInput = lastInput;
-        rotate(velocity.x * dt * 60, velocity.y * dt * 60);
-        lastInput = keepInput;
-        velocity.x *= Math.exp(-dt * 5);
-        velocity.y *= Math.exp(-dt * 5);
-      }
-      if (!reducedMotion && now - lastInput > IDLE_BEFORE_SPIN_MS) {
-        spin.setFromAxisAngle(yAxis, dt * 0.22);
-        root.quaternion.premultiply(spin);
-      }
-    }
+    easeTowardsTargets(dt, now);
 
     // A short flash of light when the last bond closes.
     const flash = Math.exp(-(now - flashStart) / 260);
@@ -539,9 +571,6 @@ export function createScene({ host, atomLabel, onFailure }) {
     setMolecule,
     reset: resetView,
     scaleBy,
-    rotate(dx, dy) {
-      velocity = { x: 0, y: 0 };
-      rotate(dx, dy);
-    },
+    rotate: glide,
   };
 }
