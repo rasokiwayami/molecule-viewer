@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { parseSDF } from '../src/sdf.js';
 import { matchCatalog, exactMatch, normalizeName, searchExternal } from '../src/catalog.js';
 import { BLURBS } from '../src/blurbs.js';
+import { NOTES } from '../src/notes.js';
 import { OneEuroFilter, pinchState } from '../src/hands.js';
 const catalog = JSON.parse(readFileSync(new URL('../public/data/index.json', import.meta.url)));
 const load = (id) =>
@@ -28,6 +29,7 @@ describe('SDF', () => {
     for (const c of catalog) {
       expect(load(c.id).atoms.length).toBeGreaterThan(0);
       expect(BLURBS[c.id]).toBeTruthy();
+      expect(NOTES[c.id]).toHaveLength(2);
     }
   });
   it('rejects unsupported, truncated and corrupt records', () => {

@@ -70,6 +70,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
   let detector = null;
   let busy = false;
   const stats = { samples: 0, delay: 0 };
+  let lastSample = 0;
   let stream = null;
   let state = 'off';
   let session = 0;
@@ -312,11 +313,16 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       }
     }
     onHands(hands);
-    applyGesture(hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)));
+    applyGesture(
+      hands.filter((hand) => hand.pinched).sort((a, b) => a.id.localeCompare(b.id)),
+      now,
+    );
   }
 
   /** Moves the molecule by the change since the previous frame with the same pinching hands. */
-  function applyGesture(pinches) {
+  function applyGesture(pinches, now) {
+    const interval = now - lastSample;
+    lastSample = now;
     const signature = pinches.map((hand) => hand.id).join(',');
     const before = lastPinches?.signature === signature ? lastPinches.pinches : null;
     lastPinches = pinches.length ? { signature, pinches } : null;
@@ -326,6 +332,7 @@ export function createHands({ video, overlay, scene, onChange, onHands, onError 
       scene.rotate(
         (pinches[0].x - before[0].x) * ROTATION_GAIN,
         (pinches[0].y - before[0].y) * ROTATION_GAIN,
+        interval,
       );
       return;
     }

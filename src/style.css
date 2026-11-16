@@ -291,6 +291,10 @@ nav {
   transition-delay: 0.16s;
 }
 
+#info > :nth-child(n + 6) {
+  transition-delay: 0.28s;
+}
+
 #info > :nth-child(5) {
   transition-delay: 0.22s;
 }
@@ -332,6 +336,31 @@ nav {
   color: var(--ink-faint);
   font-size: 16px;
   letter-spacing: 0.06em;
+}
+
+#group {
+  width: fit-content;
+  margin-bottom: 14px !important;
+  padding: 4px 12px;
+  border: 1px solid rgba(215, 255, 94, 0.45);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+#group[hidden],
+#shape[hidden] {
+  display: none;
+}
+
+#shape {
+  margin-top: 10px !important;
+  max-width: 26em;
+  padding-left: 12px;
+  border-left: 2px solid rgba(215, 255, 94, 0.6);
+  color: var(--ink-faint);
+  font-size: clamp(14px, 1.1vw, 16px);
 }
 
 #blurb {

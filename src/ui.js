@@ -1,4 +1,5 @@
 import { BLURBS } from './blurbs.js';
+import { NOTES } from './notes.js';
 import { element } from './elements.js';
 import { CONFIG } from './config.js';
 
@@ -78,6 +79,11 @@ export function createUI({ onSelect }) {
     $('formula').replaceChildren(...formulaNodes(item.formula));
     $('weight').textContent = `${item.weight} g/mol`;
     $('blurb').textContent = BLURBS[item.id] || '';
+    const [group = '', shape = ''] = NOTES[item.id] || [];
+    $('group').textContent = group;
+    $('group').hidden = !group;
+    $('shape').textContent = shape;
+    $('shape').hidden = !shape;
     $('legend').replaceChildren(...legendNodes(item.structure.atoms));
     info.classList.toggle('long', item.ja.length >= 7);
     watermark.textContent = item.en;
