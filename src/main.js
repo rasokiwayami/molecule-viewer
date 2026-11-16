@@ -18,6 +18,11 @@ const HAND_ERRORS = {
   'no-camera': 'カメラが見つかりません',
   failed: 'カメラを使えませんでした',
 };
+const VOICE_ERRORS = {
+  denied: 'マイクが許可されていません',
+  'no-speech': '聞き取れませんでした',
+  failed: '声の入力を使えませんでした',
+};
 
 let catalog = [];
 let currentId = null;
@@ -90,10 +95,11 @@ async function searchOnline(query) {
   }
 }
 
-search.addEventListener('input', () => {
+function filterChips() {
   const matches = matchCatalog(catalog, search.value);
   ui.renderChips(matches.length ? matches : catalog);
-});
+}
+search.addEventListener('input', filterChips);
 
 $('search-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -104,11 +110,25 @@ $('search-form').addEventListener('submit', (event) => {
   else searchOnline(query);
 });
 
-setupVoice($('voice'), (heard) => {
-  search.value = heard;
-  const match = exactMatch(catalog, heard) || matchCatalog(catalog, heard)[0];
-  if (match) selectBuiltin(match);
-  else searchOnline(heard);
+setupVoice($('voice'), {
+  onListening(listening) {
+    search.placeholder = listening ? '話してください' : '分子の名前';
+    if (listening) {
+      search.value = '';
+      ui.toast('');
+    }
+  },
+  onInterim(heard) {
+    search.value = heard;
+    filterChips();
+  },
+  onFinal(heard) {
+    search.value = heard;
+    const match = exactMatch(catalog, heard) || matchCatalog(catalog, heard)[0];
+    if (match) selectBuiltin(match);
+    else searchOnline(heard);
+  },
+  onError: (reason) => ui.toast(VOICE_ERRORS[reason]),
 });
 
 function step(offset) {
