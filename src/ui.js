@@ -133,7 +133,7 @@ export function createUI({ onSelect }) {
         'p',
         '分子の名前を入れると、その形が立体で現れます。カメラに手をかざすと、つまんで回せます。',
       ),
-      node('p', 'このアプリはAIに頼んで作りました。'),
+      node('p', '日本語で頼んで、15分ほどで動くようになりました。コードは1行も書いていません。'),
     ];
     if (CONFIG.workshop.trim()) children.push(node('p', CONFIG.workshop.trim(), 'workshop'));
     openPanel(...children, credit);
