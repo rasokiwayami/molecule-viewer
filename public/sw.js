@@ -8,7 +8,14 @@ const CACHE = `${PREFIX}${VERSION}`;
 const OPTIONAL = `${PREFIX}hands-v1`;
 const local = (path) => new URL(path, scope).href;
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(PRECACHE.map(local))));
+  // "reload" skips the browser's own cache, so the page and its scripts come from the same release.
+  const fresh = PRECACHE.map((path) => new Request(local(path), { cache: 'reload' }));
+  event.waitUntil(
+    caches
+      .open(CACHE)
+      .then((cache) => cache.addAll(fresh))
+      .then(() => self.skipWaiting()),
+  );
 });
 self.addEventListener('activate', (event) => {
   event.waitUntil(

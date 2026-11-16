@@ -92,6 +92,14 @@
     </dialog>
 
     <noscript>JavaScriptを有効にすると表示されます。</noscript>
+    <script>
+      // When a new release takes over, show it at once instead of mixing it with the old page.
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), {
+          once: true,
+        });
+      }
+    </script>
     <script type="module" src="./src/main.js"></script>
   </body>
 </html>

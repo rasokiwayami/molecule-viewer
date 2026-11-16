@@ -11,7 +11,8 @@ it('service worker caches the core, keeps hand downloads optional, and serves of
     const data = stores.get(name);
     return {
       addAll: async (urls) => {
-        for (const url of urls) {
+        for (const { url, cache } of urls) {
+          expect(cache).toBe('reload');
           downloads.push(url);
           data.set(url, `cached:${url}`);
         }
@@ -36,11 +37,17 @@ it('service worker caches the core, keeps hand downloads optional, and serves of
     .replace('__HAND_ASSETS__', JSON.stringify(['mediapipe/hand_landmarker.task']));
   vm.runInNewContext(source, {
     URL,
+    Request: class {
+      constructor(url, options) {
+        Object.assign(this, { url }, options);
+      }
+    },
     caches,
     self: {
       registration: { scope },
       location: { origin: 'https://example.test' },
       clients: { claim: async () => {} },
+      skipWaiting: async () => {},
       addEventListener: (type, fn) => (handlers[type] = fn),
     },
     fetch: async () => {
