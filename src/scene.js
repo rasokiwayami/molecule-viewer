@@ -332,7 +332,7 @@ export function createScene({ host, atomLabel, onFailure }) {
     const viewHeight = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const viewWidth = viewHeight * camera.aspect;
     const wide = camera.aspect > 1.2;
-    const room = wide ? Math.min(viewHeight * 0.36, viewWidth * 0.26) : viewWidth * 0.4;
+    const room = wide ? Math.min(viewHeight * 0.32, viewWidth * 0.25) : viewWidth * 0.4;
     fitScale = room / current.radius;
     pivot.position.set(wide ? viewWidth * 0.1 : 0, viewHeight * (wide ? 0.035 : -0.05), 0);
     root.scale.setScalar(fitScale * zoom);
