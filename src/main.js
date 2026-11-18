@@ -24,12 +24,17 @@ const VOICE_ERRORS = {
   failed: '声の入力を使えませんでした',
 };
 
+// `?embed=1` shows only the molecule, the list of molecules and the hand button, for use inside another page.
+const embedded = new URLSearchParams(location.search).has('embed');
+document.documentElement.classList.toggle('embed', embedded);
+
 let catalog = [];
 let currentId = null;
 // Only the most recent request may update the screen.
 let latestRequest = 0;
 
 const ui = createUI({ onSelect: selectBuiltin });
+if (embedded) ui.setHandsState('off'); // shows the embedded wording of the camera button from the start
 const search = $('search');
 
 let scene = null;
@@ -191,7 +196,7 @@ async function init() {
 }
 init();
 
-if (import.meta.env.PROD && 'serviceWorker' in navigator && isSecureContext) {
+if (import.meta.env.PROD && !embedded && 'serviceWorker' in navigator && isSecureContext) {
   addEventListener('load', () => {
     navigator.serviceWorker.register(assetURL('sw.js'), { scope: assetURL('') }).catch(() => {});
   });

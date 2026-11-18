@@ -144,9 +144,12 @@ export function createUI({ onSelect }) {
     const button = $('hands-toggle');
     button.dataset.state = state;
     button.setAttribute('aria-pressed', String(state !== 'off'));
-    $('hands-text').textContent = { off: '手で動かす', starting: '準備中', on: '手で操作中' }[
-      state
-    ];
+    // Embedded in another page, the button says outright that it turns the camera on.
+    const embedded = document.documentElement.classList.contains('embed');
+    const labels = embedded
+      ? { off: 'カメラをオンにして、自分の手で回す', starting: '準備中', on: 'カメラをオフにする' }
+      : { off: '手で動かす', starting: '準備中', on: '手で操作中' };
+    $('hands-text').textContent = labels[state];
     $('camera-panel').hidden = state === 'off';
   }
 

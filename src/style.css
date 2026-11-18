@@ -816,3 +816,70 @@ dialog[open] {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Embedded in another page (?embed=1): the molecule, the list of molecules and the hand button remain. */
+html.embed .wordmark,
+html.embed #qr-open,
+html.embed #about-open,
+html.embed #info,
+html.embed #search-form,
+html.embed #watermark {
+  display: none;
+}
+
+html.embed header {
+  justify-content: flex-end;
+}
+
+/* A vertical swipe scrolls the host page; a sideways drag still turns the molecule. */
+html.embed #stage canvas {
+  touch-action: pan-y;
+}
+
+/* Embedded: the camera button slowly glows until it is pressed, to invite a try. */
+html.embed .primary:not([data-state='starting']):not([data-state='on']) {
+  animation: invite 2.8s ease-in-out infinite;
+}
+
+html.embed .primary {
+  height: 42px;
+  padding: 0 16px 0 14px;
+  font-size: 14px;
+}
+
+@keyframes invite {
+  50% {
+    box-shadow: 0 0 34px 6px rgba(215, 255, 94, 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.embed .primary {
+    animation: none;
+  }
+}
+
+/* Embedded: a line under the camera button says what pressing it does, until it is pressed. */
+html.embed .primary {
+  position: relative;
+}
+
+html.embed .primary:not([data-state='starting']):not([data-state='on'])::after {
+  content: '↑ 押すと、カメラに映した手で回せます';
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+@keyframes invite {
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(215, 255, 94, 0.18),
+      0 0 44px 10px rgba(215, 255, 94, 0.55);
+  }
+}

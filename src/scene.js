@@ -355,7 +355,13 @@ export function createScene({ host, atomLabel, onFailure }) {
     const wide = camera.aspect > 1.2;
     const room = wide ? Math.min(viewHeight * 0.32, viewWidth * 0.25) : viewWidth * 0.4;
     fitScale = room / current.radius;
-    pivot.position.set(wide ? viewWidth * 0.1 : 0, viewHeight * (wide ? 0.035 : -0.05), 0);
+    // With the panels hidden (embedded), the molecule sits in the middle.
+    const embedded = document.documentElement.classList.contains('embed');
+    pivot.position.set(
+      wide && !embedded ? viewWidth * 0.1 : 0,
+      embedded ? 0 : viewHeight * (wide ? 0.035 : -0.05),
+      0,
+    );
     root.scale.setScalar(fitScale * zoom);
     glow.scale.setScalar(current.radius * fitScale * zoom * 4.2);
   }
@@ -480,6 +486,8 @@ export function createScene({ host, atomLabel, onFailure }) {
   canvas.addEventListener(
     'wheel',
     (event) => {
+      // Inside another page the wheel belongs to that page's scroll.
+      if (document.documentElement.classList.contains('embed')) return;
       event.preventDefault();
       scaleBy(Math.exp(-event.deltaY * 0.0012));
     },
