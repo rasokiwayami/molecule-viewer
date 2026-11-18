@@ -831,10 +831,7 @@ html.embed header {
   justify-content: flex-end;
 }
 
-/* A vertical swipe scrolls the host page; a sideways drag still turns the molecule. */
-html.embed #stage canvas {
-  touch-action: pan-y;
-}
+/* Every drag on the molecule turns it. The host page scrolls from its own areas around the frame. */
 
 /* Embedded: the camera button slowly glows until it is pressed, to invite a try. */
 html.embed .primary:not([data-state='starting']):not([data-state='on']) {
