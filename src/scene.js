@@ -457,7 +457,7 @@ export function createScene({ host, atomLabel, onFailure }) {
     travelled += Math.hypot(dx, dy);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 1) {
-      velocity = { x: dx * 0.008, y: dy * 0.008 };
+      velocity = { x: dx * 0.012, y: dy * 0.012 };
       rotate(velocity.x, velocity.y);
     } else {
       const spread = pointerSpread();

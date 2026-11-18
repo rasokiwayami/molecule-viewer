@@ -3,7 +3,7 @@ import { CONFIG, assetURL } from './config.js';
 const ACCENT = '#d7ff5e';
 const THUMB_TIP = 4;
 const INDEX_TIP = 8;
-const ROTATION_GAIN = 5;
+const ROTATION_GAIN = 7.5;
 // A hand that jumps this far between frames is treated as a new hand.
 const JUMP_LIMIT = 0.22;
 const SKELETON = [
