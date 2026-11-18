@@ -880,3 +880,12 @@ html.embed .primary:not([data-state='starting']):not([data-state='on'])::after {
       0 0 44px 10px rgba(215, 255, 94, 0.55);
   }
 }
+
+/* Embedded on a narrow screen: a smaller camera preview, just above the list of molecules. */
+@media (max-width: 760px) {
+  html.embed #camera-panel {
+    width: 118px;
+    bottom: calc(var(--edge) + 84px);
+    border-radius: 14px;
+  }
+}

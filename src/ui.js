@@ -147,10 +147,11 @@ export function createUI({ onSelect }) {
     // Embedded in another page, the button says outright that it turns the camera on.
     const embedded = document.documentElement.classList.contains('embed');
     const labels = embedded
-      ? { off: 'カメラをオンにして、自分の手で回す', starting: '準備中', on: 'カメラをオフにする' }
+      ? { off: 'カメラをオンにして、自分の手で回す', starting: '準備中（少し待ちます）', on: 'カメラをオフにする' }
       : { off: '手で動かす', starting: '準備中', on: '手で操作中' };
     $('hands-text').textContent = labels[state];
     $('camera-panel').hidden = state === 'off';
+    document.documentElement.classList.toggle('camera-on', state !== 'off');
   }
 
   /** Draws a ring on the stage for each detected hand; it shrinks while pinching. */

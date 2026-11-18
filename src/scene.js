@@ -353,15 +353,23 @@ export function createScene({ host, atomLabel, onFailure }) {
     const viewHeight = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     const viewWidth = viewHeight * camera.aspect;
     const wide = camera.aspect > 1.2;
-    const room = wide ? Math.min(viewHeight * 0.32, viewWidth * 0.25) : viewWidth * 0.4;
-    fitScale = room / current.radius;
     // With the panels hidden (embedded), the molecule sits in the middle.
     const embedded = document.documentElement.classList.contains('embed');
-    pivot.position.set(
-      wide && !embedded ? viewWidth * 0.1 : 0,
-      embedded ? 0 : viewHeight * (wide ? 0.035 : -0.05),
-      0,
-    );
+    // On a narrow embedded view the camera preview takes the lower right corner,
+    // so the molecule gets smaller and moves up and left to stay clear of it.
+    const besidePreview =
+      embedded && !wide && document.documentElement.classList.contains('camera-on');
+    const room = wide
+      ? Math.min(viewHeight * 0.32, viewWidth * 0.25)
+      : viewWidth * (besidePreview ? 0.31 : 0.4);
+    fitScale = room / current.radius;
+    if (besidePreview) pivot.position.set(-viewWidth * 0.12, viewHeight * 0.01, 0);
+    else
+      pivot.position.set(
+        wide && !embedded ? viewWidth * 0.1 : 0,
+        embedded ? 0 : viewHeight * (wide ? 0.035 : -0.05),
+        0,
+      );
     root.scale.setScalar(fitScale * zoom);
     glow.scale.setScalar(current.radius * fitScale * zoom * 4.2);
   }
@@ -585,5 +593,6 @@ export function createScene({ host, atomLabel, onFailure }) {
     reset: resetView,
     scaleBy,
     rotate: glide,
+    refit: fit,
   };
 }

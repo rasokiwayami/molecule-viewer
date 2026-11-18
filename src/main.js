@@ -54,11 +54,23 @@ const hands =
     video: $('camera'),
     overlay: $('skeleton'),
     scene,
-    onChange: ui.setHandsState,
+    onChange: (state) => {
+      ui.setHandsState(state);
+      scene.refit(); // the embedded view moves the molecule clear of the camera preview
+    },
     onHands: ui.showHands,
     onError: (reason) => ui.toast(HAND_ERRORS[reason]),
   });
 $('hands-toggle').onclick = () => hands?.toggle();
+
+// Embedded, the page around it leads people to the camera button, so the hand-tracking
+// files (about 10 MB) are fetched ahead of time. They then come from the browser cache.
+if (embedded && hands && !navigator.connection?.saveData) {
+  const warm = () =>
+    ['mediapipe/vision_wasm_module_internal.js', 'mediapipe/vision_wasm_module_internal.wasm', 'mediapipe/hand_landmarker.task']
+      .forEach((path) => fetch(assetURL(path), { priority: 'low' }).then((r) => r.arrayBuffer()).catch(() => {}));
+  setTimeout(warm, 2500);
+}
 
 function show(item) {
   currentId = item.id;
