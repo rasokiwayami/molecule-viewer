@@ -166,10 +166,17 @@ export function createUI({ onSelect }) {
     });
   }
 
+  /** Embedded: the line under the camera button that says what to do next. Empty hides it. */
+  function showGuide(text) {
+    const button = $('hands-toggle');
+    if (text) button.dataset.guide = text;
+    else delete button.dataset.guide;
+  }
+
   function showUnsupported() {
     document.body.append(node('p', 'このブラウザでは3D表示ができません。', 'unsupported'));
     $('hands-toggle').disabled = true;
   }
 
-  return { toast, renderChips, showMolecule, setHandsState, showHands, showUnsupported, panel };
+  return { toast, renderChips, showMolecule, setHandsState, showHands, showGuide, showUnsupported, panel };
 }

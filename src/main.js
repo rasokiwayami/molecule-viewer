@@ -12,6 +12,7 @@ import { createHands } from './hands.js';
 import { setupVoice } from './voice.js';
 import { createUI, $ } from './ui.js';
 import { assetURL } from './config.js';
+import { createGuide } from './guide.js';
 
 const HAND_ERRORS = {
   denied: 'カメラが許可されていません',
@@ -37,6 +38,13 @@ const ui = createUI({ onSelect: selectBuiltin });
 if (embedded) ui.setHandsState('off'); // shows the embedded wording of the camera button from the start
 const search = $('search');
 
+// Embedded: one line under the camera button walks a first-time visitor through the gestures,
+// and the page around the frame is told how far they got so it can time what it shows next.
+const guide = createGuide({
+  show: ui.showGuide,
+  report: (message) => parent.postMessage({ source: 'molecule-viewer', ...message }, '*'),
+});
+
 let scene = null;
 try {
   scene = createScene({
@@ -57,8 +65,12 @@ const hands =
     onChange: (state) => {
       ui.setHandsState(state);
       scene.refit(); // the embedded view moves the molecule clear of the camera preview
+      if (embedded) guide.setState(state);
     },
-    onHands: ui.showHands,
+    onHands: (list) => {
+      ui.showHands(list);
+      if (embedded) guide.update(list);
+    },
     onError: (reason) => ui.toast(HAND_ERRORS[reason]),
   });
 $('hands-toggle').onclick = () => hands?.toggle();

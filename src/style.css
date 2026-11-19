@@ -889,3 +889,23 @@ html.embed .primary:not([data-state='starting']):not([data-state='on'])::after {
     border-radius: 14px;
   }
 }
+
+/* Embedded: while the camera is on, the line under the button says what to do next. */
+html.embed .primary[data-guide]::after {
+  content: attr(data-guide);
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 4px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(8, 12, 24, 0.78);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--edge) - 8px);
+  white-space: normal;
+  text-align: left;
+  color: var(--accent);
+  pointer-events: none;
+}
